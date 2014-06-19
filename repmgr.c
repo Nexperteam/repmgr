@@ -1901,21 +1901,6 @@ do_witness_create(void)
 
 	log_notice(_("Configuration has been successfully copied to the witness\n"));
 
-	/* drop superuser powers if needed */
-	if (runtime_options.username[0] && runtime_options.localport[0] && strcmp(runtime_options.username,"postgres")!=0 )
-	{
-		sprintf(script, "%s/psql -h 127.0.0.1 -p %s -U postgres -v ON_ERROR_STOP=1 -c \"ALTER ROLE %s NOSUPERUSER \"", 
-			options.pg_bindir,runtime_options.localport,runtime_options.username);
-		log_info("Drop superuser powers on user for witness db: %s.\n", script);
-
-		r = system(script);
-		if (r != 0)
-		{
-			log_err("Can't alter superuser power for dbuser on witness\n");
-			/* no exit here...nevermind */
-		}
-	}
-		
 }
 
 
