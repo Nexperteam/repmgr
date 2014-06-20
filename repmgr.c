@@ -61,6 +61,7 @@ static bool check_parameters_for_action(const int action);
 static bool create_schema(PGconn *conn);
 static bool copy_configuration(PGconn *masterconn, PGconn *witnessconn);
 static void write_primary_conninfo(char *line);
+static void promote_aftercare(PGconn *masterconn);
 
 static void do_master_register(void);
 static void do_standby_register(void);
@@ -402,14 +403,15 @@ do_cluster_show(void)
 	PGconn	   *conn;
 	PGresult   *res;
 	char		sqlquery[QUERY_STR_LEN];
-	char		node_role[MAXLEN];
+	char		active_role[MAXLEN];
+	char		saved_role[MAXLEN];
 	int			i;
 
 	/* We need to connect to check configuration */
 	log_info(_("%s connecting to database\n"), progname);
 	conn = establish_db_connection(options.conninfo, true);
 
-	sqlquery_snprintf(sqlquery, "SELECT conninfo, witness FROM %s.repl_nodes;",
+	sqlquery_snprintf(sqlquery, "SELECT conninfo, witness, master FROM %s.repl_nodes;",
 					  repmgr_schema);
 	res = PQexec(conn, sqlquery);
 
@@ -423,20 +425,28 @@ do_cluster_show(void)
 	}
 	PQfinish(conn);
 
-	printf("Role      | Connection String \n");
+	printf("ActiveRole     | SavedRole      | Connection String \n");
 	for (i = 0; i < PQntuples(res); i++)
 	{
 		conn = establish_db_connection(PQgetvalue(res, i, 0), false);
 		if (PQstatus(conn) != CONNECTION_OK)
-			strcpy(node_role, "  FAILED");
+			strcpy(active_role, "  FAILED");
 		else if (strcmp(PQgetvalue(res, i, 1), "t") == 0)
-			strcpy(node_role, "  witness");
+			strcpy(active_role, "  witness");
 		else if (is_standby(conn))
-			strcpy(node_role, "  standby");
+			strcpy(active_role, "  standby");
 		else
-			strcpy(node_role, "* master");
+			strcpy(active_role, "* master");
+		
+		if (strcmp(PQgetvalue(res,i,1),"t")==0)
+			strcmp(saved_role," witness");
+		else if (strcmp(PQgetvalue(res,i,2),"t") == 0)
+			strcmp(saved_role," master");
+		else
+			strcmp(saved_role," slave");
 
-		printf("%-10s", node_role);
+		printf("%-10s", active_role);
+		printf("| %-10s", saved_role); 
 		printf("| %s\n", PQgetvalue(res, i, 0));
 
 		PQfinish(conn);
@@ -632,8 +642,8 @@ do_master_register(void)
 
 	/* Now register the master */
 
-	sqlquery_snprintf(sqlquery, "INSERT INTO %s.repl_nodes (id, cluster, name, conninfo, priority) "
-					  "VALUES (%d, '%s', '%s', '%s', %d)",
+	sqlquery_snprintf(sqlquery, "INSERT INTO %s.repl_nodes (id, cluster, name, conninfo, priority, master) "
+					  "VALUES (%d, '%s', '%s', '%s', %d,'true')",
 		repmgr_schema, options.node, options.cluster_name, options.node_name,
 					  options.conninfo, options.priority);
 	log_debug(_("master register: %s\n"), sqlquery);
@@ -1460,6 +1470,7 @@ do_standby_promote(void)
 	{
 		log_notice(_("%s: STANDBY PROMOTE successful.  You should REINDEX any hash indexes you have.\n"),
 				progname);
+		promote_aftercare(conn);
 	}
 	PQfinish(conn);
 	return;
@@ -2330,7 +2341,8 @@ create_schema(PGconn *conn)
 					  "  name      text    not null,    "
 					  "  conninfo  text    not null,    "
 					  "  priority  integer not null,    "
-			   "  witness   boolean not null default false)", repmgr_schema);
+			   		  "  witness   boolean not null default false,  "
+					  "  master    boolean not null default false)", repmgr_schema);
 	log_debug(_("master register: %s\n"), sqlquery);
 	res = PQexec(conn, sqlquery);
 	if (!res || PQresultStatus(res) != PGRES_COMMAND_OK)
@@ -2453,7 +2465,7 @@ copy_configuration(PGconn *masterconn, PGconn *witnessconn)
 		return false;
 	}
 
-	sqlquery_snprintf(sqlquery, "SELECT id, name, conninfo, priority, witness FROM %s.repl_nodes",
+	sqlquery_snprintf(sqlquery, "SELECT id, name, conninfo, priority, witness, master FROM %s.repl_nodes",
 					  repmgr_schema);
 	res = PQexec(masterconn, sqlquery);
 	if (PQresultStatus(res) != PGRES_TUPLES_OK)
@@ -2465,13 +2477,14 @@ copy_configuration(PGconn *masterconn, PGconn *witnessconn)
 	}
 	for (i = 0; i < PQntuples(res); i++)
 	{
-		sqlquery_snprintf(sqlquery, "INSERT INTO %s.repl_nodes(id, cluster, name, conninfo, priority, witness) "
-						  "VALUES (%d, '%s', '%s', '%s', %d, '%s')",
+		sqlquery_snprintf(sqlquery, "INSERT INTO %s.repl_nodes(id, cluster, name, conninfo, priority, witness, master) "
+						  "VALUES (%d, '%s', '%s', '%s', %d, '%s','%s')",
 						  repmgr_schema, atoi(PQgetvalue(res, i, 0)),
 						  options.cluster_name, PQgetvalue(res, i, 1),
 						  PQgetvalue(res, i, 2),
 						  atoi(PQgetvalue(res, i, 3)),
-						  PQgetvalue(res, i, 4));
+						  PQgetvalue(res, i, 4),
+						  PQgetvalue(res, i, 5));
 
 		res = PQexec(witnessconn, sqlquery);
 		if (!res || PQresultStatus(res) != PGRES_COMMAND_OK)
@@ -2484,6 +2497,76 @@ copy_configuration(PGconn *masterconn, PGconn *witnessconn)
 	}
 
 	return true;
+}
+
+/* this function alters the database status for to reflect the new master
+ * tries to find a witness and resyncs the witness */
+static void
+promote_aftercare(PGconn *conn)
+{
+	char            sqlquery[QUERY_STR_LEN];
+        PGresult   	*res;
+	PGconn	   	* witnessconn;
+
+        sqlquery_snprintf(sqlquery, "UPDATE %s.repl_nodes set master=false", repmgr_schema);
+        log_debug(_("reset all masters: %s\n"), sqlquery);
+        res = PQexec(conn, sqlquery);
+        if (!res || PQresultStatus(res) != PGRES_COMMAND_OK)
+        {
+                log_err(_("reset all masters failed %s: %s\n"),
+                                repmgr_schema, PQerrorMessage(conn));
+                PQfinish(conn);
+                exit(ERR_BAD_CONFIG);
+        }
+        PQclear(res);
+	
+	/* now write ourself in as master */
+	sqlquery_snprintf(sqlquery, "UPDATE %s.repl_nodes SET master=true WHERE id=%d",
+					repmgr_schema,options.node);
+        log_debug(_("write ourself in as master: %s\n"), sqlquery);
+        res = PQexec(conn, sqlquery);
+        if (!res || PQresultStatus(res) != PGRES_COMMAND_OK)
+        {
+                log_err(_("write ourself in as master failed %s: %s\n"),
+                                repmgr_schema, PQerrorMessage(conn));
+                PQfinish(conn);
+                exit(ERR_BAD_CONFIG);
+        }
+        PQclear(res);
+	
+	/* see if we got a witness here */
+	sqlquery_snprintf(sqlquery, "SELECT conninfo FROM  %s.repl_nodes WHERE witness=true",
+					repmgr_schema);
+        log_debug(_("check if a witness does exist in this cluster: %s\n"), sqlquery);
+        res = PQexec(conn, sqlquery);
+        if (!res || PQresultStatus(res) != PGRES_COMMAND_OK)
+        {
+                log_err(_("check witness in cluster %s: %s\n"),
+                                repmgr_schema, PQerrorMessage(conn));
+                PQfinish(conn);
+                exit(ERR_BAD_CONFIG);
+        }
+	else
+	{
+		/* do we have a witness */ 
+		if(PQntuples(res)>0)
+		{
+			witnessconn = establish_db_connection(PQgetvalue(res, 0, 0), true);
+	         	if (!copy_configuration(conn, witnessconn))
+        		{
+                		PQfinish(conn);
+                		PQfinish(witnessconn);
+                		exit(ERR_BAD_CONFIG);
+        		}
+        		PQfinish(witnessconn);
+
+        		log_notice(_("Configuration has been successfully copied to the witness\n"));
+		}
+	}
+        PQclear(res);
+
+
+	
 }
 
 /* This function uses global variables to determine connection settings. Special

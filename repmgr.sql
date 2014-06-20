@@ -19,6 +19,7 @@ CREATE TABLE repl_nodes (
   conninfo      text    not null,
   priority  	integer not null,
   witness   	boolean not null default false
+  master   	boolean not null default false
 );
 ALTER TABLE repl_nodes OWNER TO repmgr;
 
