@@ -439,11 +439,11 @@ do_cluster_show(void)
 			strcpy(active_role, "* master");
 		
 		if (strcmp(PQgetvalue(res,i,1),"t")==0)
-			strcmp(saved_role," witness");
+			strcpy(saved_role," witness");
 		else if (strcmp(PQgetvalue(res,i,2),"t") == 0)
-			strcmp(saved_role," master");
+			strcpy(saved_role," master");
 		else
-			strcmp(saved_role," slave");
+			strcpy(saved_role," slave");
 
 		printf("%-10s", active_role);
 		printf("| %-10s", saved_role); 
