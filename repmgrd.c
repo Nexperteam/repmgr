@@ -80,6 +80,7 @@ typedef struct s_node_info
 	bool		is_ready;
 	bool		is_visible;
 	bool		is_witness;
+	bool		is_master;
 }	t_node_info;
 
 
@@ -117,6 +118,7 @@ static bool check_connection(PGconn *conn, const char *type);
 static void update_shared_memory(char *last_wal_standby_applied);
 static void update_registration(void);
 static void do_failover(void);
+static void do_recovery(void);
 
 static unsigned long long int wal_location_to_bytes(char *wal_location);
 
@@ -278,7 +280,21 @@ main(int argc, char **argv)
 
 	log_info(_("%s Connecting to database '%s'\n"), progname,
 			 local_options.conninfo);
-	my_local_conn = establish_db_connection(local_options.conninfo, true);
+	my_local_conn = establish_db_connection(local_options.conninfo, false);
+	if (PQstatus(my_local_conn) != CONNECTION_OK)
+	{
+		if (local_options.failover == AUTOMATIC_FAILOVER)
+		{		
+			log_info("connection to database failed, starting recovery mode.\n");
+			do_recovery();
+		}
+		else
+		{
+			log_info("connection to database failed and no automatic failover -> exiting\n");
+			terminate(ERR_FAILOVER_FAIL);
+		}
+	}
+	
 
 	/* should be v9 or better */
 	log_info(_("%s Connected to database, checking its state\n"), progname);
@@ -487,6 +503,227 @@ main(int argc, char **argv)
 	return 0;
 }
 
+/* this function tries to create a good situation out of a stopped local db.
+ * steps: -start database in a sort of deconnected mode
+ *        -retrieve node information
+ *        -check what witness and most of the nodes think about us
+ *        -initiate recovery if necessary
+ */
+static void 
+do_recovery(void)
+{
+	PGresult   	*res;
+	PGresult   	*node_res;
+	char		sqlquery[QUERY_STR_LEN];
+	char		conninfo_str[MAXLEN];
+	char            script[MAXLEN];
+	int		total_nodes = 0;
+	int		masterrole = 0;
+	int		witnessrole = 0;
+	int		node_arrayid=-1;
+	int		visible_nodes=0;
+	int		ret;
+	int		i=0;
+
+
+	bool 		do_jumpstart=false;
+	bool 		do_slaveconvert=false;
+	PGconn	   	*recovery_conn = NULL;
+	PGconn     	*node_conn = NULL;
+        t_node_info 	nodes[50];
+
+
+	/*
+	 * try to start the server in a somewhat disconnected mode.  Normally nobody would start it like this.
+	 * a line like: host repmgr repmgr 127.10.54.32/32 trust should exist in pg_hba or this will fail
+	 */
+	log_notice(_("%s: starting server using %s/pg_ctl\n"), progname,
+		   				local_options.pg_bindir);
+	maxlen_snprintf(script, "%s/pg_ctl %s -o \"unix_socket_directory=''\" -o \"listen_address='127.10.54.32'\" -p 2345 start",
+				local_options.pg_bindir, local_options.pgctl_options);
+	ret = system(script);
+	if (ret != 0)
+	{
+		log_err(_("Can't start PostgreSQL server in deconnected mode\n"));
+		exit(ERR_NO_RESTART);
+	}
+	
+        log_info(_("%s connecting to local deconnected database\n"), progname);
+	maxlen_snprintf(conninfo_str,"host=127.10.54.32 port=2345 user=%s database=%s",
+			local_options.recovery_dbuser,local_options.recovery_dbname);
+        recovery_conn = establish_db_connection(conninfo_str, true);
+
+        /* get a list of nodes, including myself */
+        sprintf(sqlquery, "SELECT id, conninfo, witness, master "
+                        "  FROM %s.repl_nodes "
+                        " WHERE cluster = '%s' "
+                        " ORDER BY priority, id ",
+                        repmgr_schema, local_options.cluster_name);
+
+        res = PQexec(recovery_conn, sqlquery);
+        if (PQresultStatus(res) != PGRES_TUPLES_OK)
+        {
+                log_err(_("Can't get nodes' info is this node correctly initialized?: %s\n"), PQerrorMessage(recovery_conn));
+                PQclear(res);
+                terminate(ERR_DB_QUERY);
+        }
+	total_nodes = PQntuples(res);
+
+	/* iterate through the nodes and see what they think of us */
+	for (i = 0; i < total_nodes; i++)
+	{
+		nodes[i].node_id = atoi(PQgetvalue(res, i, 0));
+		if(nodes[i].node_id != local_options.node)
+		{
+			strncpy(nodes[i].conninfo_str, PQgetvalue(res, i, 1), MAXLEN);
+			nodes[i].is_witness = (strcmp(PQgetvalue(res, i, 2), "t") == 0) ? true : false;
+			nodes[i].is_master = (strcmp(PQgetvalue(res, i, 3), "t") == 0) ? true : false;
+	
+			/*
+			 * Initialize on false so if we can't reach this node we know that
+			 * later
+			 */
+			nodes[i].is_visible = false;
+			nodes[i].is_ready = false;
+
+			XLAssignValue(nodes[i].xlog_location, 0, 0);
+
+			log_debug(_("%s: node=%d conninfo=\"%s\" witness=%s master=%s\n"),
+				  progname, nodes[i].node_id, nodes[i].conninfo_str,
+				  (nodes[i].is_witness) ? "true" : "false",
+				  (nodes[i].is_master) ? "true": "false");
+
+			node_conn = establish_db_connection(nodes[i].conninfo_str, false);
+
+			/* if we can't see the node just skip it */
+			if (PQstatus(node_conn) != CONNECTION_OK)
+			{
+				if (node_conn != NULL)
+					PQfinish(node_conn);
+
+				continue;
+			}
+			else
+			{
+        			sprintf(sqlquery, "SELECT master,witness FROM %s.repl_nodes WHERE id = '%d' ",
+               	         			repmgr_schema, local_options.node);
+        			node_res = PQexec(recovery_conn, sqlquery);
+				(strcmp(PQgetvalue(node_res, 0, 0), "t") == 0) ? masterrole++ : masterrole--;
+				(strcmp(PQgetvalue(node_res, 0, 1), "t") == 0) ? witnessrole++ : witnessrole--;
+				visible_nodes++;
+				nodes[i].is_visible = true;
+				nodes[i].is_ready = true;
+			}
+
+		}
+		else
+		{
+			/* do not take in to account what we think all the rest has to agree on our role */
+			node_arrayid = i;
+			strncpy(nodes[i].conninfo_str, PQgetvalue(res, i, 1), MAXLEN);
+			nodes[i].is_witness = (strcmp(PQgetvalue(res, i, 2), "t") == 0) ? true : false;
+			nodes[i].is_master = (strcmp(PQgetvalue(res, i, 3), "t") == 0) ? true : false;
+		}	
+	}
+	PQfinish(node_conn);
+	/* terminate the recovery db we do not need it anymore */
+	log_notice(_("%s: stopping server using %s/pg_ctl\n"), progname,
+		   				local_options.pg_bindir);
+	maxlen_snprintf(script, "%s/pg_ctl %s -o \"unix_socket_directory=''\" -o \"listen_address='127.10.54.32'\" -p 2345 stop",
+				local_options.pg_bindir, local_options.pgctl_options);
+	ret = system(script);
+	if (ret != 0)
+	{
+		log_err(_("Can't stop PostgreSQL server in deconnected mode\n"));
+		exit(ERR_NO_RESTART);
+	}
+	
+	if (visible_nodes < (total_nodes / 2.0))
+	{
+		log_err(_("Can't reach most of the nodes.\n"
+				  "It is not safe to bring up this postgresql server.\n"
+		"Human intervention is needed to resolve this situation.\n"));
+		terminate(ERR_FAILOVER_FAIL);
+	}
+	
+	/* gather numbers and figure out what to do */
+	if(total_nodes <= 1 || total_nodes%2 == 1)
+	{
+		log_err(_("The population of this cluster is too small to take decisions or \n"
+				  "This cluster has not an uneven number of nodes.\n"
+		"Human intervention is needed to resolve this situation.\n"));
+		terminate(ERR_FAILOVER_FAIL);
+	}	
+	if(masterrole > (total_nodes / 2.0))
+	{
+		if(nodes[node_arrayid].is_master)
+		{
+			/* we have a died master, no action needed */
+			log_info(_("this is a master which has died.  All she needs is a jumpstart.\n"));
+			do_jumpstart=true;
+		}
+		else
+		{
+			/* this is awkward we do not think we're master but the others do */
+			log_info(_("we do not think that we are master but all the others do.\n"));
+			terminate(ERR_FAILOVER_FAIL);
+		}
+	}
+	if(witnessrole > 0)
+	{
+		if(nodes[node_arrayid].is_witness)
+		{
+			log_info(_("this is a witness which has died. All she needs is a jumpstart.\n"));
+			do_jumpstart=true;
+		}
+		else
+		{
+			log_info(_("someone thinks that we are a witness...bailing out.\n"));
+			terminate(ERR_FAILOVER_FAIL);
+		}
+	}
+	if(masterrole < ((total_nodes /2.0)*-1))
+	{
+		if(nodes[node_arrayid].is_master)
+		{
+			log_info(_("this is a former master which lost it mastership.  Needs converting to slave\n"));
+			do_slaveconvert=true;
+		}
+		else
+		{
+			log_info(_("this is an old slave.  All she needs is a jumpstart.\n"));
+			do_jumpstart=true;
+		}
+	}
+	if(do_jumpstart)
+	{
+		log_notice(_("%s: starting server using %s/pg_ctl\n"), progname,
+		   				local_options.pg_bindir);
+		maxlen_snprintf(script, "%s/pg_ctl %s start",
+				local_options.pg_bindir, local_options.pgctl_options);
+		ret = system(script);
+		if (ret != 0)
+		{
+			log_err(_("Can't start PostgreSQL server in normal mode\n"));
+			exit(ERR_NO_RESTART);
+		}
+	}
+	if(do_slaveconvert)
+	{
+		/* will not start the database however a next pass of repmgr will do this as a jumpstart */
+		for (i = 0; i < total_nodes; i++)
+       		{
+			if(nodes[i].is_master)
+			{
+				log_info(_("Please reclone this postgres server into a slave. Masterconn is %s\n"),
+					nodes[i].conninfo_str);
+			}
+		}
+		exit(ERR_NO_RESTART);
+		
+	}
+	
+}
 /*
  *
  */
@@ -799,7 +1036,7 @@ do_failover(void)
 	t_node_info nodes[50];
 
 	/* initialize to keep compiler quiet */
-	t_node_info best_candidate = {-1, "", InvalidXLogRecPtr, false, false, false};
+	t_node_info best_candidate = {-1, "", InvalidXLogRecPtr, false, false, false,false};
 
 	/* get a list of standby nodes, including myself */
 	sprintf(sqlquery, "SELECT id, conninfo, witness "

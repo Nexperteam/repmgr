@@ -65,7 +65,6 @@ static void promote_aftercare(PGconn *masterconn);
 
 static void do_master_register(void);
 static void do_standby_register(void);
-static void do_standby_clone(void);
 static void do_standby_promote(void);
 static void do_standby_follow(void);
 static void do_witness_create(void);
