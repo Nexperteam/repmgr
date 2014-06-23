@@ -45,9 +45,11 @@ typedef struct
 	char		logfile[MAXLEN];
 	int			monitor_interval_secs;
 	int			retry_promote_interval_secs;
+	char		recovery_dbname[MAXLEN];
+	char		recovery_dbuser[MAXLEN];
 }	t_configuration_options;
 
-#define T_CONFIGURATION_OPTIONS_INITIALIZER { "", -1, "", MANUAL_FAILOVER, -1, "", "", "", "", "", "", "", -1, -1, -1, "", "", "", 0, 0 }
+#define T_CONFIGURATION_OPTIONS_INITIALIZER { "", -1, "", MANUAL_FAILOVER, -1, "", "", "", "", "", "", "", -1, -1, -1, "", "", "", 0, 0, "", "" }
 
 void		parse_config(const char *config_file, t_configuration_options * options);
 void		parse_line(char *buff, char *name, char *value);

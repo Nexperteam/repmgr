@@ -45,6 +45,8 @@ parse_config(const char *config_file, t_configuration_options * options)
 	memset(options->ssh_options, 0, sizeof(options->ssh_options));
 	memset(options->pg_bindir, 0, sizeof(options->pg_bindir));
 	memset(options->pgctl_options, 0, sizeof(options->pgctl_options));
+	memset(options->recovery_dbname, 0, sizeof(options->recovery_dbname));
+	memset(options->recovery_dbuser, 0, sizeof(options->recovery_dbuser));
 
 	/* if nothing has been provided defaults to 60 */
 	options->master_response_timeout = 60;
@@ -132,6 +134,10 @@ parse_config(const char *config_file, t_configuration_options * options)
 			options->monitor_interval_secs = atoi(value);
 		else if (strcmp(name, "retry_promote_interval_secs") == 0)
 			options->retry_promote_interval_secs = atoi(value);
+		else if (strcmp(name, "recovery_dbname") == 0)
+			strncpy(options->recovery_dbname, value, MAXLEN);
+		else if (strcmp(name, "recovery_dbuser") == 0)
+			strncpy(options->recovery_dbuser, value, MAXLEN);
 		else
 			log_warning(_("%s/%s: Unknown name/value pair!\n"), name, value);
 	}
@@ -317,6 +323,8 @@ reload_config(char *config_file, t_configuration_options * orig_options)
 	orig_options->master_response_timeout = new_options.master_response_timeout;
 	orig_options->reconnect_attempts = new_options.reconnect_attempts;
 	orig_options->reconnect_intvl = new_options.reconnect_intvl;
+	strcpy(orig_options->recovery_dbname, new_options.recovery_dbname);
+	strcpy(orig_options->recovery_dbuser, new_options.recovery_dbuser);
 
 	/*
 	 * XXX These ones can change with a simple SIGHUP?

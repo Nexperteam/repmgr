@@ -74,3 +74,4 @@ typedef struct
 #define T_RUNTIME_OPTIONS_INITIALIZER { "", "", "", "", "", "", DEFAULT_WAL_KEEP_SEGMENTS, false, false, false, false, "", "", 0, "" }
 
 #endif
+
