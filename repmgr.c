@@ -65,6 +65,7 @@ static void promote_aftercare(PGconn *masterconn);
 
 static void do_master_register(void);
 static void do_standby_register(void);
+static void do_standby_clone(void);
 static void do_standby_promote(void);
 static void do_standby_follow(void);
 static void do_witness_create(void);
@@ -407,6 +408,7 @@ do_cluster_show(void)
 	char		sqlquery[QUERY_STR_LEN];
 	char		active_role[MAXLEN];
 	char		saved_role[MAXLEN];
+	char		witness_role[MAXLEN];
 	int			i;
 	bool 		haswitness=false;
         char            witness_conn_str[MAXLEN];
@@ -478,7 +480,7 @@ do_cluster_show(void)
 		if (haswitness)
 		{
 			sqlquery_snprintf(sqlquery, "SELECT witness, master FROM %s.repl_nodes WHERE id=%s;",
-					  repmgr_schema,local_options.node);
+					  repmgr_schema,options.node);
 			witness_res = PQexec(witness_conn, sqlquery);
 			if (strcmp(PQgetvalue(witness_res,0,0),"t")==0)
 				strcpy(witness_role,"witness");
@@ -495,10 +497,8 @@ do_cluster_show(void)
 		printf("%-10s\t%-10s\t%-10s\t%s\n", 
 				active_role,saved_role,witness_role,PQgetvalue(res, i, 0));
 			PQfinish(conn);
-		}
 	}
 		
-
 	PQclear(res);
 }
 
