@@ -416,7 +416,7 @@ do_cluster_show(void)
 
 	/* We need to connect to check configuration */
 	log_info(_("%s connecting to database\n"), progname);
-	conn = establish_db_connection(options.conninfo, true);
+	local_conn = establish_db_connection(options.conninfo, true);
 
 	/* see if we got a local working witness here */
 	sqlquery_snprintf(sqlquery, "SELECT conninfo FROM %s.repl_nodes where witness=true;",
@@ -427,6 +427,7 @@ do_cluster_show(void)
 	{
 		log_info(_("There does not seem to be a witness in the config.?\n%s\n"),
 				PQerrorMessage(local_conn));
+		witness_conn=NULL;
 		PQclear(witness_res);
 	}
 	else
@@ -479,7 +480,7 @@ do_cluster_show(void)
 		/* check what the witness thinks */
 		if (haswitness)
 		{
-			sqlquery_snprintf(sqlquery, "SELECT witness, master FROM %s.repl_nodes WHERE id=%s;",
+			sqlquery_snprintf(sqlquery, "SELECT witness, master FROM %s.repl_nodes WHERE id=%d;",
 					  repmgr_schema,options.node);
 			witness_res = PQexec(witness_conn, sqlquery);
 			if (strcmp(PQgetvalue(witness_res,0,0),"t")==0)
