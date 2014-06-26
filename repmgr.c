@@ -399,57 +399,105 @@ main(int argc, char **argv)
 static void
 do_cluster_show(void)
 {
+	PGconn	   *local_conn;
 	PGconn	   *conn;
+	PGconn	   *witness_conn;
 	PGresult   *res;
+	PGresult   *witness_res;
 	char		sqlquery[QUERY_STR_LEN];
 	char		active_role[MAXLEN];
 	char		saved_role[MAXLEN];
 	int			i;
+	bool 		haswitness=false;
+        char            witness_conn_str[MAXLEN];
+
 
 	/* We need to connect to check configuration */
 	log_info(_("%s connecting to database\n"), progname);
 	conn = establish_db_connection(options.conninfo, true);
 
-	sqlquery_snprintf(sqlquery, "SELECT conninfo, witness, master FROM %s.repl_nodes;",
+	/* see if we got a local working witness here */
+	sqlquery_snprintf(sqlquery, "SELECT conninfo FROM %s.repl_nodes where witness=true;",
 					  repmgr_schema);
-	res = PQexec(conn, sqlquery);
+	witness_res = PQexec(local_conn, sqlquery);
+
+	if (PQresultStatus(witness_res) != PGRES_TUPLES_OK)
+	{
+		log_info(_("There does not seem to be a witness in the config.?\n%s\n"),
+				PQerrorMessage(local_conn));
+		PQclear(witness_res);
+	}
+	else
+	{
+		strcpy(witness_conn_str,PQgetvalue(witness_res,0,0));
+		witness_conn=establish_db_connection(witness_conn_str,false);
+		if(PQstatus(witness_conn) == CONNECTION_OK)
+			haswitness=true;
+	}	
+
+	/* now enumerate all the nodes in this cluster */
+	sqlquery_snprintf(sqlquery, "SELECT id,conninfo, witness, master FROM %s.repl_nodes;",
+					  repmgr_schema);
+	res = PQexec(local_conn, sqlquery);
 
 	if (PQresultStatus(res) != PGRES_TUPLES_OK)
 	{
 		log_err(_("Can't get nodes information, have you registered them?\n%s\n"),
-				PQerrorMessage(conn));
+				PQerrorMessage(local_conn));
 		PQclear(res);
-		PQfinish(conn);
+		PQfinish(local_conn);
 		exit(ERR_BAD_CONFIG);
 	}
-	PQfinish(conn);
+		
+	PQfinish(local_conn);
 
-	printf("ActiveRole     | SavedRole      | Connection String \n");
+	printf("ActiveRole\tSavedRole\tWitness\tConnection String \n");
+			
 	for (i = 0; i < PQntuples(res); i++)
 	{
+		/* actually verify if what kind of db connection we can establish*/
 		conn = establish_db_connection(PQgetvalue(res, i, 0), false);
 		if (PQstatus(conn) != CONNECTION_OK)
-			strcpy(active_role, "  FAILED");
+			strcpy(active_role, "FAILED");
 		else if (strcmp(PQgetvalue(res, i, 1), "t") == 0)
-			strcpy(active_role, "  witness");
+			strcpy(active_role, "witness");
 		else if (is_standby(conn))
-			strcpy(active_role, "  standby");
+			strcpy(active_role, "standby");
 		else
 			strcpy(active_role, "* master");
-		
+
+		/* now extract what the local db thinks */	
 		if (strcmp(PQgetvalue(res,i,1),"t")==0)
-			strcpy(saved_role," witness");
+			strcpy(saved_role,"witness");
 		else if (strcmp(PQgetvalue(res,i,2),"t") == 0)
-			strcpy(saved_role," master");
+			strcpy(saved_role,"master");
 		else
-			strcpy(saved_role," slave");
+			strcpy(saved_role,"slave");
 
-		printf("%-10s", active_role);
-		printf("| %-10s", saved_role); 
-		printf("| %s\n", PQgetvalue(res, i, 0));
+		/* check what the witness thinks */
+		if (haswitness)
+		{
+			sqlquery_snprintf(sqlquery, "SELECT witness, master FROM %s.repl_nodes WHERE id=%s;",
+					  repmgr_schema,local_options.node);
+			witness_res = PQexec(witness_conn, sqlquery);
+			if (strcmp(PQgetvalue(witness_res,0,0),"t")==0)
+				strcpy(witness_role,"witness");
+			else if (strcmp(PQgetvalue(witness_res,0,1),"t") == 0)
+				strcpy(witness_role,"master");
+			else
+				strcpy(witness_role,"slave");
+		}
+		else
+		{
+			strcpy(witness_role,"N/A");
+		}
 
-		PQfinish(conn);
+		printf("%-10s\t%-10s\t%-10s\t%s\n", 
+				active_role,saved_role,witness_role,PQgetvalue(res, i, 0));
+			PQfinish(conn);
+		}
 	}
+		
 
 	PQclear(res);
 }
