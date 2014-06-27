@@ -423,7 +423,7 @@ do_cluster_show(void)
 					  repmgr_schema);
 	witness_res = PQexec(local_conn, sqlquery);
 
-	if (PQresultStatus(witness_res) != PGRES_TUPLES_OK)
+	if (PQresultStatus(witness_res) != PGRES_TUPLES_OK || PQntuples(witness_res)>1)
 	{
 		log_info(_("There does not seem to be a witness in the config.?\n%s\n"),
 				PQerrorMessage(local_conn));
