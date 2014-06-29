@@ -411,6 +411,7 @@ do_cluster_show(void)
 	char		witness_role[MAXLEN];
 	int			i;
 	bool 		haswitness=false;
+	bool 		local_conn_ok=true;
         char            witness_conn_str[MAXLEN];
 
 
@@ -462,6 +463,7 @@ do_cluster_show(void)
 		conn = establish_db_connection(PQgetvalue(res, i, 0), false);
 		if (PQstatus(conn) != CONNECTION_OK)
 			strcpy(active_role, "FAILED");
+			local_conn_ok=false;
 		else if (strcmp(PQgetvalue(res, i, 1), "t") == 0)
 			strcpy(active_role, "witness");
 		else if (is_standby(conn))
@@ -474,8 +476,10 @@ do_cluster_show(void)
 			strcpy(saved_role,"witness");
 		else if (strcmp(PQgetvalue(res,i,2),"t") == 0)
 			strcpy(saved_role,"master");
-		else
+		else if (local_conn_ok)
 			strcpy(saved_role,"slave");
+		else
+			strcpy(saved_role,"unknown");
 
 		/* check what the witness thinks */
 		if (haswitness)
@@ -483,12 +487,19 @@ do_cluster_show(void)
 			sqlquery_snprintf(sqlquery, "SELECT witness, master FROM %s.repl_nodes WHERE id=%d;",
 					  repmgr_schema,options.node);
 			witness_res = PQexec(witness_conn, sqlquery);
-			if (strcmp(PQgetvalue(witness_res,0,0),"t")==0)
-				strcpy(witness_role,"witness");
-			else if (strcmp(PQgetvalue(witness_res,0,1),"t") == 0)
-				strcpy(witness_role,"master");
+			if(PQntuples(witness_res)>0)
+			{
+				strcpy(witness_role,"unknown");
+			}
 			else
-				strcpy(witness_role,"slave");
+			{
+				if (strcmp(PQgetvalue(witness_res,0,0),"t")==0)
+					strcpy(witness_role,"witness");
+				else if (strcmp(PQgetvalue(witness_res,0,1),"t") == 0)
+					strcpy(witness_role,"master");
+				else
+					strcpy(witness_role,"slave");
+			}
 		}
 		else
 		{
