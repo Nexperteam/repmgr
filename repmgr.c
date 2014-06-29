@@ -462,8 +462,10 @@ do_cluster_show(void)
 		/* actually verify if what kind of db connection we can establish*/
 		conn = establish_db_connection(PQgetvalue(res, i, 0), false);
 		if (PQstatus(conn) != CONNECTION_OK)
+		{
 			strcpy(active_role, "FAILED");
 			local_conn_ok=false;
+		}
 		else if (strcmp(PQgetvalue(res, i, 1), "t") == 0)
 			strcpy(active_role, "witness");
 		else if (is_standby(conn))
@@ -488,9 +490,7 @@ do_cluster_show(void)
 					  repmgr_schema,options.node);
 			witness_res = PQexec(witness_conn, sqlquery);
 			if(PQntuples(witness_res)>0)
-			{
 				strcpy(witness_role,"unknown");
-			}
 			else
 			{
 				if (strcmp(PQgetvalue(witness_res,0,0),"t")==0)
