@@ -455,7 +455,7 @@ do_cluster_show(void)
 		
 	PQfinish(local_conn);
 
-	printf("ActiveRole\ttWitness\tConnection String \n");
+	printf("ActiveRole\tWitness\tConnection String \n");
 			
 	for (i = 0; i < PQntuples(res); i++)
 	{
