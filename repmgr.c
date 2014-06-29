@@ -406,7 +406,6 @@ do_cluster_show(void)
 	PGresult   *res;
 	PGresult   *witness_res;
 	char		sqlquery[QUERY_STR_LEN];
-	char		active_role[MAXLEN];
 	char		saved_role[MAXLEN];
 	char		witness_role[MAXLEN];
 	int			i;
@@ -426,7 +425,7 @@ do_cluster_show(void)
 
 	if (PQresultStatus(witness_res) != PGRES_TUPLES_OK || PQntuples(witness_res)<1)
 	{
-		log_info(_("There does not seem to be a witness in the config.?\n%s\n"),
+		log_info(_("There does not seem to be a witness in the config?\n%s\n"),
 				PQerrorMessage(local_conn));
 		witness_conn=NULL;
 		PQclear(witness_res);
@@ -440,6 +439,7 @@ do_cluster_show(void)
 	}	
 
 	/* now enumerate all the nodes in this cluster */
+	log_debug(_("%s try to enumerate all nodes in this cluster"),progname);
 	sqlquery_snprintf(sqlquery, "SELECT id,conninfo, witness, master FROM %s.repl_nodes;",
 					  repmgr_schema);
 	res = PQexec(local_conn, sqlquery);
@@ -460,28 +460,23 @@ do_cluster_show(void)
 	for (i = 0; i < PQntuples(res); i++)
 	{
 		/* actually verify if what kind of db connection we can establish*/
-		conn = establish_db_connection(PQgetvalue(res, i, 0), false);
+		conn = establish_db_connection(PQgetvalue(res, i, 1), false);
 		if (PQstatus(conn) != CONNECTION_OK)
 		{
-			strcpy(active_role, "FAILED");
+			strcpy(saved_role, "FAILED");
 			local_conn_ok=false;
 		}
-		else if (strcmp(PQgetvalue(res, i, 1), "t") == 0)
-			strcpy(active_role, "witness");
-		else if (is_standby(conn))
-			strcpy(active_role, "standby");
 		else
-			strcpy(active_role, "* master");
-
-		/* now extract what the local db thinks */	
-		if (strcmp(PQgetvalue(res,i,1),"t")==0)
-			strcpy(saved_role,"witness");
-		else if (strcmp(PQgetvalue(res,i,2),"t") == 0)
-			strcpy(saved_role,"master");
-		else if (local_conn_ok)
-			strcpy(saved_role,"slave");
-		else
-			strcpy(saved_role,"unknown");
+		{
+			if (strcmp(PQgetvalue(res,i,2),"t")==0)
+				strcpy(saved_role,"witness");
+			else if (strcmp(PQgetvalue(res,i,3),"t") == 0)
+				strcpy(saved_role,"master");
+			else if (local_conn_ok)
+				strcpy(saved_role,"slave");
+			else
+				strcpy(saved_role,"unknown");
+		}
 
 		/* check what the witness thinks */
 		if (haswitness)
@@ -506,8 +501,8 @@ do_cluster_show(void)
 			strcpy(witness_role,"N/A");
 		}
 
-		printf("%-10s\t%-10s\t%-10s\t%s\n", 
-				active_role,saved_role,witness_role,PQgetvalue(res, i, 0));
+		printf("%-10s\t%-10s\t%s\n", 
+				saved_role,witness_role,PQgetvalue(res, i, 1));
 			PQfinish(conn);
 	}
 		
