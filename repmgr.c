@@ -409,7 +409,7 @@ do_cluster_show(void)
 	char		saved_role[MAXLEN];
 	char		witness_role[MAXLEN];
 	int			i;
-	bool 		haswitness=false;
+	bool 		has_witness=false;
 	bool 		local_conn_ok=true;
 	bool 		has_inconsist=false;
         char            witness_conn_str[MAXLEN];
@@ -436,7 +436,7 @@ do_cluster_show(void)
 		strcpy(witness_conn_str,PQgetvalue(witness_res,0,0));
 		witness_conn=establish_db_connection(witness_conn_str,false);
 		if(PQstatus(witness_conn) == CONNECTION_OK)
-			haswitness=true;
+			has_witness=true;
 	}	
 
 	/* now enumerate all the nodes in this cluster */
@@ -492,7 +492,7 @@ do_cluster_show(void)
 		}
 
 		/* check what the witness thinks */
-		if (haswitness)
+		if (has_witness)
 		{
 			sqlquery_snprintf(sqlquery, "SELECT witness, master FROM %s.repl_nodes WHERE id=%d;",
 					  repmgr_schema,options.node);
@@ -518,7 +518,7 @@ do_cluster_show(void)
 				saved_role,witness_role,PQgetvalue(res, i, 1));
 			PQfinish(conn);
 	}
-	if(hasinconsist)
+	if(has_inconsist)
 		printf("\n* means that there is a inconsistency with that server eg. as master in db but responds as a slave)\n");	
 	PQclear(res);
 }
