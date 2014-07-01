@@ -472,14 +472,14 @@ do_cluster_show(void)
 				strcpy(saved_role,"witness");
 			else if (strcmp(PQgetvalue(res,i,3),"t") == 0)
 				if(is_standby(conn))
-					strcpy(saved_role,"master");
-				else
 					strcpy(saved_role,"*master");
+				else
+					strcpy(saved_role,"master");
 			else if (local_conn_ok)
 				if (is_standby(conn))
-					strcpy(saved_role,"*slave");
-				else
 					strcpy(saved_role,"slave");
+				else
+					strcpy(saved_role,"*slave");
 			else
 				strcpy(saved_role,"unknown");
 		}
@@ -511,7 +511,7 @@ do_cluster_show(void)
 				saved_role,witness_role,PQgetvalue(res, i, 1));
 			PQfinish(conn);
 	}
-		
+	printf("\n* means that there is a inconsistency with that server eg. as master in db but responds as a slave)\n");	
 	PQclear(res);
 }
 
