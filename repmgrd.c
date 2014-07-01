@@ -600,7 +600,7 @@ do_recovery(void)
 			/* if we can't see the node just skip it */
 			if (PQstatus(node_conn) != CONNECTION_OK)
 			{
-				log_debug(_("%s: problem connectin to node with id %s\n"),progname,nodes[i].node_id);
+				log_debug(_("%s: problem connectin to node with id %d\n"),progname,nodes[i].node_id);
 				if (node_conn != NULL)
 					PQfinish(node_conn);
 
