@@ -471,9 +471,15 @@ do_cluster_show(void)
 			if (strcmp(PQgetvalue(res,i,2),"t")==0)
 				strcpy(saved_role,"witness");
 			else if (strcmp(PQgetvalue(res,i,3),"t") == 0)
-				strcpy(saved_role,"master");
+				if(is_standby(conn))
+					strcpy(saved_role,"master");
+				else
+					strcpy(saved_role,"*master");
 			else if (local_conn_ok)
-				strcpy(saved_role,"slave");
+				if (is_standby(conn)
+					strcpy(saved_role,"*slave");
+				else
+					strcpy(saved_role,"slave");
 			else
 				strcpy(saved_role,"unknown");
 		}
