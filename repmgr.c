@@ -503,6 +503,8 @@ do_cluster_show(void)
 				strcpy(witness_role,"unknown");
 			else
 			{
+				log_debug(_("%s evaluating the result from the witness\n"),progname);
+				
 				if (strcmp(PQgetvalue(witness_res,0,0),"t")==0)
 					strcpy(witness_role,"witness");
 				else if (strcmp(PQgetvalue(witness_res,0,1),"t") == 0)
