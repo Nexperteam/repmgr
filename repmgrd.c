@@ -537,6 +537,11 @@ do_recovery(void)
 	 * try to start the server in a somewhat disconnected mode.  Normally nobody would start it like this.
 	 * a line like: host repmgr repmgr 127.10.54.32/32 trust should exist in pg_hba or this will fail
 	 */
+	if(strcmp(local_options.recovery_dbdir,""))
+	{
+		log_notice("recovery_dbdir not set exiting");
+		exit(ERR_NO_RESTART);
+	}
 	log_notice(_("%s: starting server using %s/pg_ctl\n"), progname,
 		   				local_options.pg_bindir);
 	maxlen_snprintf(script, "%s/pg_ctl %s -D %s  -o \"unix_socket_directory=''\" -o \"listen_address='127.10.54.32'\" -p 2345 start",
