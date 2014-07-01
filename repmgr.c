@@ -500,11 +500,8 @@ do_cluster_show(void)
 					  repmgr_schema,atoi(PQgetvalue(res,i,0)));
 			witness_res = PQexec(witness_conn, sqlquery);
 			if(PQntuples(witness_res)>0)
-				strcpy(witness_role,"unknown");
-			else
 			{
 				log_debug(_("%s evaluating the result from the witness\n"),progname);
-				
 				if (strcmp(PQgetvalue(witness_res,0,0),"t")==0)
 					strcpy(witness_role,"witness");
 				else if (strcmp(PQgetvalue(witness_res,0,1),"t") == 0)
@@ -512,6 +509,8 @@ do_cluster_show(void)
 				else
 					strcpy(witness_role,"slave");
 			}
+			else
+				strcpy(witness_role,"unknown");
 		}
 		else
 		{
