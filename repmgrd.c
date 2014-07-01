@@ -537,9 +537,9 @@ do_recovery(void)
 	 * try to start the server in a somewhat disconnected mode.  Normally nobody would start it like this.
 	 * a line like: host repmgr repmgr 127.10.54.32/32 trust should exist in pg_hba or this will fail
 	 */
-	if(strcmp(local_options.recovery_dbdir,""))
+	if(strcmp(local_options.recovery_dbdir,"")==0)
 	{
-		log_notice(_("%s: recovery_dbdir not set exiting %s\n"),progname,local_options.recovery_dbdir);
+		log_notice(_("%s: recovery_dbdir not set exiting\n"),progname);
 		exit(ERR_NO_RESTART);
 	}
 	log_notice(_("%s: starting server using %s/pg_ctl\n"), progname,
