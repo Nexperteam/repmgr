@@ -544,7 +544,7 @@ do_recovery(void)
 	}
 	log_notice(_("%s: starting server using %s/pg_ctl\n"), progname,
 		   				local_options.pg_bindir);
-	maxlen_snprintf(script, "%s/pg_ctl %s -D %s  -o \"unix_socket_directory=''\" -o \"listen_address='127.10.54.32'\" -p 2345 start",
+	maxlen_snprintf(script, "%s/pg_ctl %s -D %s  -o \"unix_socket_directory=''\" -o \"-k '' -h 127.10.54.32 -p2345\" start",
 				local_options.pg_bindir, local_options.pgctl_options,local_options.recovery_dbdir);
 	ret = system(script);
 	if (ret != 0)
