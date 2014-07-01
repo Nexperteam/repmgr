@@ -702,8 +702,8 @@ do_recovery(void)
 	{
 		log_notice(_("%s: starting server using %s/pg_ctl\n"), progname,
 		   				local_options.pg_bindir);
-		maxlen_snprintf(script, "%s/pg_ctl %s start",
-				local_options.pg_bindir, local_options.pgctl_options);
+		maxlen_snprintf(script, "%s/pg_ctl %s start -D %s",
+				local_options.pg_bindir, local_options.pgctl_options,local_options.recovery_dbdir);
 		ret = system(script);
 		if (ret != 0)
 		{
@@ -713,17 +713,8 @@ do_recovery(void)
 	}
 	if(do_slaveconvert)
 	{
-		/* will not start the database however a next pass of repmgr will do this as a jumpstart */
-		for (i = 0; i < total_nodes; i++)
-       		{
-			if(nodes[i].is_master)
-			{
-				log_info(_("Please reclone this postgres server into a slave. Masterconn is %s\n"),
-					nodes[i].conninfo_str);
-			}
-		}
+		log_info(_("Please reclone this postgres server into a slave.\n"),
 		exit(ERR_NO_RESTART);
-		
 	}
 	
 }
