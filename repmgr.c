@@ -2610,9 +2610,9 @@ promote_aftercare(PGconn *conn)
 					repmgr_schema);
         log_debug(_("check if a witness does exist in this cluster: %s\n"), sqlquery);
         res = PQexec(conn, sqlquery);
-        if (!res || PQresultStatus(res) != PGRES_COMMAND_OK)
+        if (!res || PQresultStatus(res) != PGRES_TUPLES_OK)
         {
-                log_err(_("check witness in cluster %s: %s\n"),
+                log_err(_("unable to check for a witness in cluster %s: %s\n"),
                                 repmgr_schema, PQerrorMessage(conn));
                 PQfinish(conn);
                 exit(ERR_BAD_CONFIG);
@@ -2635,9 +2635,6 @@ promote_aftercare(PGconn *conn)
 		}
 	}
         PQclear(res);
-
-
-	
 }
 
 /* This function uses global variables to determine connection settings. Special
