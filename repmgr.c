@@ -495,7 +495,7 @@ do_cluster_show(void)
 		if (has_witness)
 		{
 			sqlquery_snprintf(sqlquery, "SELECT witness, master FROM %s.repl_nodes WHERE id=%d;",
-					  repmgr_schema,options.node);
+					  repmgr_schema,PQgetvalue(res,i,0));
 			witness_res = PQexec(witness_conn, sqlquery);
 			if(PQntuples(witness_res)>0)
 				strcpy(witness_role,"unknown");
