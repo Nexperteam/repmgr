@@ -651,10 +651,9 @@ do_recovery(void)
 	}
 	
 	/* gather numbers and figure out what to do */
-	if(total_nodes <= 1 || total_nodes%2 == 1)
+	if(total_nodes <= 1)
 	{
-		log_err(_("The population of this cluster is too small to take decisions or \n"
-				  "This cluster has not an uneven number of nodes.\n"
+		log_err(_("The population of this cluster is too small to take decisions\n"
 		"Human intervention is needed to resolve this situation.\n"));
 		terminate(ERR_FAILOVER_FAIL);
 	}	
