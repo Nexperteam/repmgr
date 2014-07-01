@@ -439,7 +439,7 @@ do_cluster_show(void)
 	}	
 
 	/* now enumerate all the nodes in this cluster */
-	log_debug(_("%s try to enumerate all nodes in this cluster"),progname);
+	log_debug(_("%s try to enumerate all nodes in this cluster\n"),progname);
 	sqlquery_snprintf(sqlquery, "SELECT id,conninfo, witness, master FROM %s.repl_nodes;",
 					  repmgr_schema);
 	res = PQexec(local_conn, sqlquery);
