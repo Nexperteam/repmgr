@@ -476,7 +476,7 @@ do_cluster_show(void)
 				else
 					strcpy(saved_role,"*master");
 			else if (local_conn_ok)
-				if (is_standby(conn)
+				if (is_standby(conn))
 					strcpy(saved_role,"*slave");
 				else
 					strcpy(saved_role,"slave");
