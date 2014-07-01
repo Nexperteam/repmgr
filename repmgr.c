@@ -494,6 +494,8 @@ do_cluster_show(void)
 		/* check what the witness thinks */
 		if (has_witness)
 		{
+			log_debug(_("%s retrieve what witness thinks of this node\n"),progname);
+			
 			sqlquery_snprintf(sqlquery, "SELECT witness, master FROM %s.repl_nodes WHERE id=%d;",
 					  repmgr_schema,PQgetvalue(res,i,0));
 			witness_res = PQexec(witness_conn, sqlquery);
