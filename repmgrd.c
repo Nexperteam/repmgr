@@ -590,7 +590,7 @@ do_recovery(void)
 
 			XLAssignValue(nodes[i].xlog_location, 0, 0);
 
-			log_debug(_("%s: node=%d conninfo=\"%s\" witness=%s master=%s\n"),
+			log_debug(_("%s: connecting to node node=%d conninfo=\"%s\" our opinion: witness=%s master=%s\n"),
 				  progname, nodes[i].node_id, nodes[i].conninfo_str,
 				  (nodes[i].is_witness) ? "true" : "false",
 				  (nodes[i].is_master) ? "true": "false");
@@ -600,6 +600,7 @@ do_recovery(void)
 			/* if we can't see the node just skip it */
 			if (PQstatus(node_conn) != CONNECTION_OK)
 			{
+				log_debug(_("%s: problem connectin to node with id %s\n"),progname,nodes[i].node_id);
 				if (node_conn != NULL)
 					PQfinish(node_conn);
 
@@ -609,7 +610,7 @@ do_recovery(void)
 			{
         			sprintf(sqlquery, "SELECT master,witness FROM %s.repl_nodes WHERE id = '%d' ",
                	         			repmgr_schema, local_options.node);
-        			node_res = PQexec(recovery_conn, sqlquery);
+        			node_res = PQexec(node_conn, sqlquery);
 				(strcmp(PQgetvalue(node_res, 0, 0), "t") == 0) ? masterrole++ : masterrole--;
 				(strcmp(PQgetvalue(node_res, 0, 1), "t") == 0) ? witnessrole++ : witnessrole--;
 				visible_nodes++;
@@ -628,6 +629,7 @@ do_recovery(void)
 		}	
 	}
 	PQfinish(node_conn);
+	PQfinish(recovery_conn);
 	/* terminate the recovery db we do not need it anymore */
 	log_notice(_("%s: stopping server using %s/pg_ctl\n"), progname,
 		   				local_options.pg_bindir);
