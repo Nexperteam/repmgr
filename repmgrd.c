@@ -554,15 +554,12 @@ do_recovery(void)
 	}
 	
         log_info(_("%s connecting to local deconnected database\n"), progname);
-	maxlen_snprintf(conninfo_str,"host=127.10.54.32 port=2345 user=%s database=%s",
+	maxlen_snprintf(conninfo_str,"host=127.10.54.32 port=2345 user=%s dbname=%s",
 			local_options.recovery_dbuser,local_options.recovery_dbname);
         recovery_conn = establish_db_connection(conninfo_str, true);
 
         /* get a list of nodes, including myself */
-        sprintf(sqlquery, "SELECT id, conninfo, witness, master "
-                        "  FROM %s.repl_nodes "
-                        " WHERE cluster = '%s' "
-                        " ORDER BY priority, id ",
+        sprintf(sqlquery, "SELECT id, conninfo, witness, master FROM %s.repl_nodes WHERE cluster = '%s' ORDER BY priority, id ",
                         repmgr_schema, local_options.cluster_name);
 
         res = PQexec(recovery_conn, sqlquery);
