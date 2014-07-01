@@ -539,7 +539,7 @@ do_recovery(void)
 	 */
 	if(strcmp(local_options.recovery_dbdir,""))
 	{
-		log_notice("recovery_dbdir not set exiting");
+		log_notice(_("%s: recovery_dbdir not set exiting %s\n"),progname,local_options.recovery_dbdir);
 		exit(ERR_NO_RESTART);
 	}
 	log_notice(_("%s: starting server using %s/pg_ctl\n"), progname,
