@@ -717,7 +717,7 @@ do_recovery(void)
 	}
 	if(do_slaveconvert)
 	{
-		log_info(_("Please reclone this postgres server into a slave.\n")),
+		log_info(_("Please reclone this postgres server into a slave.\n"));
 		exit(ERR_NO_RESTART);
 	}
 	
