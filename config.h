@@ -47,6 +47,7 @@ typedef struct
 	int			retry_promote_interval_secs;
 	char		recovery_dbname[MAXLEN];
 	char		recovery_dbuser[MAXLEN];
+	char		recovery_dbdir[MAXLEN];
 }	t_configuration_options;
 
 #define T_CONFIGURATION_OPTIONS_INITIALIZER { "", -1, "", MANUAL_FAILOVER, -1, "", "", "", "", "", "", "", -1, -1, -1, "", "", "", 0, 0, "", "" }

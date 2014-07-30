@@ -409,8 +409,9 @@ do_cluster_show(void)
 	char		saved_role[MAXLEN];
 	char		witness_role[MAXLEN];
 	int			i;
-	bool 		haswitness=false;
+	bool 		has_witness=false;
 	bool 		local_conn_ok=true;
+	bool 		has_inconsist=false;
         char            witness_conn_str[MAXLEN];
 
 
@@ -435,11 +436,11 @@ do_cluster_show(void)
 		strcpy(witness_conn_str,PQgetvalue(witness_res,0,0));
 		witness_conn=establish_db_connection(witness_conn_str,false);
 		if(PQstatus(witness_conn) == CONNECTION_OK)
-			haswitness=true;
+			has_witness=true;
 	}	
 
 	/* now enumerate all the nodes in this cluster */
-	log_debug(_("%s try to enumerate all nodes in this cluster"),progname);
+	log_debug(_("%s try to enumerate all nodes in this cluster\n"),progname);
 	sqlquery_snprintf(sqlquery, "SELECT id,conninfo, witness, master FROM %s.repl_nodes;",
 					  repmgr_schema);
 	res = PQexec(local_conn, sqlquery);
@@ -455,7 +456,7 @@ do_cluster_show(void)
 		
 	PQfinish(local_conn);
 
-	printf("ActiveRole\tWitness\tConnection String \n");
+	printf("ActiveRole\tWitnessView\tConnection String \n");
 			
 	for (i = 0; i < PQntuples(res); i++)
 	{
@@ -471,23 +472,36 @@ do_cluster_show(void)
 			if (strcmp(PQgetvalue(res,i,2),"t")==0)
 				strcpy(saved_role,"witness");
 			else if (strcmp(PQgetvalue(res,i,3),"t") == 0)
-				strcpy(saved_role,"master");
+				if(is_standby(conn))
+				{
+					strcpy(saved_role,"*master");
+					has_inconsist=true;
+				}
+				else
+					strcpy(saved_role,"master");
 			else if (local_conn_ok)
-				strcpy(saved_role,"slave");
+				if (is_standby(conn))
+					strcpy(saved_role,"slave");
+				else
+				{
+					strcpy(saved_role,"*slave");
+					has_inconsist=true;
+				}
 			else
 				strcpy(saved_role,"unknown");
 		}
 
 		/* check what the witness thinks */
-		if (haswitness)
+		if (has_witness)
 		{
+			log_debug(_("%s retrieve what witness thinks of this node\n"),progname);
+			
 			sqlquery_snprintf(sqlquery, "SELECT witness, master FROM %s.repl_nodes WHERE id=%d;",
-					  repmgr_schema,options.node);
+					  repmgr_schema,atoi(PQgetvalue(res,i,0)));
 			witness_res = PQexec(witness_conn, sqlquery);
 			if(PQntuples(witness_res)>0)
-				strcpy(witness_role,"unknown");
-			else
 			{
+				log_debug(_("%s evaluating the result from the witness\n"),progname);
 				if (strcmp(PQgetvalue(witness_res,0,0),"t")==0)
 					strcpy(witness_role,"witness");
 				else if (strcmp(PQgetvalue(witness_res,0,1),"t") == 0)
@@ -495,6 +509,8 @@ do_cluster_show(void)
 				else
 					strcpy(witness_role,"slave");
 			}
+			else
+				strcpy(witness_role,"unknown");
 		}
 		else
 		{
@@ -505,7 +521,8 @@ do_cluster_show(void)
 				saved_role,witness_role,PQgetvalue(res, i, 1));
 			PQfinish(conn);
 	}
-		
+	if(has_inconsist)
+		printf("\n* means that there is a inconsistency with that server eg. as master in db but responds as a slave)\n");	
 	PQclear(res);
 }
 
@@ -2593,9 +2610,9 @@ promote_aftercare(PGconn *conn)
 					repmgr_schema);
         log_debug(_("check if a witness does exist in this cluster: %s\n"), sqlquery);
         res = PQexec(conn, sqlquery);
-        if (!res || PQresultStatus(res) != PGRES_COMMAND_OK)
+        if (!res || PQresultStatus(res) != PGRES_TUPLES_OK)
         {
-                log_err(_("check witness in cluster %s: %s\n"),
+                log_err(_("unable to check for a witness in cluster %s: %s\n"),
                                 repmgr_schema, PQerrorMessage(conn));
                 PQfinish(conn);
                 exit(ERR_BAD_CONFIG);
@@ -2618,9 +2635,6 @@ promote_aftercare(PGconn *conn)
 		}
 	}
         PQclear(res);
-
-
-	
 }
 
 /* This function uses global variables to determine connection settings. Special

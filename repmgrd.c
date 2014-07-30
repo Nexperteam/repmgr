@@ -537,10 +537,15 @@ do_recovery(void)
 	 * try to start the server in a somewhat disconnected mode.  Normally nobody would start it like this.
 	 * a line like: host repmgr repmgr 127.10.54.32/32 trust should exist in pg_hba or this will fail
 	 */
+	if(strcmp(local_options.recovery_dbdir,"")==0)
+	{
+		log_notice(_("%s: recovery_dbdir not set exiting\n"),progname);
+		exit(ERR_NO_RESTART);
+	}
 	log_notice(_("%s: starting server using %s/pg_ctl\n"), progname,
 		   				local_options.pg_bindir);
-	maxlen_snprintf(script, "%s/pg_ctl %s -o \"unix_socket_directory=''\" -o \"listen_address='127.10.54.32'\" -p 2345 start",
-				local_options.pg_bindir, local_options.pgctl_options);
+	maxlen_snprintf(script, "%s/pg_ctl %s -D %s -w  -o \"unix_socket_directory=''\" -o \"-k '' -h 127.10.54.32 -p2345\" start",
+				local_options.pg_bindir, local_options.pgctl_options,local_options.recovery_dbdir);
 	ret = system(script);
 	if (ret != 0)
 	{
@@ -549,15 +554,12 @@ do_recovery(void)
 	}
 	
         log_info(_("%s connecting to local deconnected database\n"), progname);
-	maxlen_snprintf(conninfo_str,"host=127.10.54.32 port=2345 user=%s database=%s",
+	maxlen_snprintf(conninfo_str,"host=127.10.54.32 port=2345 user=%s dbname=%s",
 			local_options.recovery_dbuser,local_options.recovery_dbname);
         recovery_conn = establish_db_connection(conninfo_str, true);
 
         /* get a list of nodes, including myself */
-        sprintf(sqlquery, "SELECT id, conninfo, witness, master "
-                        "  FROM %s.repl_nodes "
-                        " WHERE cluster = '%s' "
-                        " ORDER BY priority, id ",
+        sprintf(sqlquery, "SELECT id, conninfo, witness, master FROM %s.repl_nodes WHERE cluster = '%s' ORDER BY priority, id ",
                         repmgr_schema, local_options.cluster_name);
 
         res = PQexec(recovery_conn, sqlquery);
@@ -588,7 +590,7 @@ do_recovery(void)
 
 			XLAssignValue(nodes[i].xlog_location, 0, 0);
 
-			log_debug(_("%s: node=%d conninfo=\"%s\" witness=%s master=%s\n"),
+			log_debug(_("%s: connecting to node node=%d conninfo=\"%s\" our opinion: witness=%s master=%s\n"),
 				  progname, nodes[i].node_id, nodes[i].conninfo_str,
 				  (nodes[i].is_witness) ? "true" : "false",
 				  (nodes[i].is_master) ? "true": "false");
@@ -598,6 +600,7 @@ do_recovery(void)
 			/* if we can't see the node just skip it */
 			if (PQstatus(node_conn) != CONNECTION_OK)
 			{
+				log_debug(_("%s: problem connectin to node with id %d\n"),progname,nodes[i].node_id);
 				if (node_conn != NULL)
 					PQfinish(node_conn);
 
@@ -607,7 +610,7 @@ do_recovery(void)
 			{
         			sprintf(sqlquery, "SELECT master,witness FROM %s.repl_nodes WHERE id = '%d' ",
                	         			repmgr_schema, local_options.node);
-        			node_res = PQexec(recovery_conn, sqlquery);
+        			node_res = PQexec(node_conn, sqlquery);
 				(strcmp(PQgetvalue(node_res, 0, 0), "t") == 0) ? masterrole++ : masterrole--;
 				(strcmp(PQgetvalue(node_res, 0, 1), "t") == 0) ? witnessrole++ : witnessrole--;
 				visible_nodes++;
@@ -626,11 +629,12 @@ do_recovery(void)
 		}	
 	}
 	PQfinish(node_conn);
+	PQfinish(recovery_conn);
 	/* terminate the recovery db we do not need it anymore */
 	log_notice(_("%s: stopping server using %s/pg_ctl\n"), progname,
 		   				local_options.pg_bindir);
-	maxlen_snprintf(script, "%s/pg_ctl %s -o \"unix_socket_directory=''\" -o \"listen_address='127.10.54.32'\" -p 2345 stop",
-				local_options.pg_bindir, local_options.pgctl_options);
+	maxlen_snprintf(script, "%s/pg_ctl %s -D %s -w  -o \"unix_socket_directory=''\" -o \"-k '' -h 127.10.54.32 -p2345\" stop",
+				local_options.pg_bindir, local_options.pgctl_options,local_options.recovery_dbdir);
 	ret = system(script);
 	if (ret != 0)
 	{
@@ -647,10 +651,9 @@ do_recovery(void)
 	}
 	
 	/* gather numbers and figure out what to do */
-	if(total_nodes <= 1 || total_nodes%2 == 1)
+	if(total_nodes <= 1)
 	{
-		log_err(_("The population of this cluster is too small to take decisions or \n"
-				  "This cluster has not an uneven number of nodes.\n"
+		log_err(_("The population of this cluster is too small to take decisions\n"
 		"Human intervention is needed to resolve this situation.\n"));
 		terminate(ERR_FAILOVER_FAIL);
 	}	

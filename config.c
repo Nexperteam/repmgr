@@ -47,6 +47,7 @@ parse_config(const char *config_file, t_configuration_options * options)
 	memset(options->pgctl_options, 0, sizeof(options->pgctl_options));
 	memset(options->recovery_dbname, 0, sizeof(options->recovery_dbname));
 	memset(options->recovery_dbuser, 0, sizeof(options->recovery_dbuser));
+	memset(options->recovery_dbdir, 0, sizeof(options->recovery_dbdir));
 
 	/* if nothing has been provided defaults to 60 */
 	options->master_response_timeout = 60;
@@ -138,6 +139,8 @@ parse_config(const char *config_file, t_configuration_options * options)
 			strncpy(options->recovery_dbname, value, MAXLEN);
 		else if (strcmp(name, "recovery_dbuser") == 0)
 			strncpy(options->recovery_dbuser, value, MAXLEN);
+		else if (strcmp(name, "recovery_dbdir") == 0)
+			strncpy(options->recovery_dbdir, value, MAXLEN);
 		else
 			log_warning(_("%s/%s: Unknown name/value pair!\n"), name, value);
 	}
