@@ -542,7 +542,7 @@ do_recovery(void)
 		log_notice(_("%s: recovery_dbdir not set exiting\n"),progname);
 		exit(ERR_NO_RESTART);
 	}
-	log_notice(_("%s: starting server using %s/pg_ctl\n"), progname,
+	log_notice(_("%s: starting deconnected server on ip 127.10.54.32 using %s/pg_ctl\n"), progname,
 		   				local_options.pg_bindir);
 	maxlen_snprintf(script, "%s/pg_ctl %s -D %s -w  -o \"unix_socket_directory=''\" -o \"-k '' -h 127.10.54.32 -p2345\" start",
 				local_options.pg_bindir, local_options.pgctl_options,local_options.recovery_dbdir);
@@ -590,10 +590,10 @@ do_recovery(void)
 
 			XLAssignValue(nodes[i].xlog_location, 0, 0);
 
-			log_debug(_("%s: connecting to node node=%d conninfo=\"%s\" our opinion: witness=%s master=%s\n"),
+			log_debug(_("%s: connecting to node node=%d conninfo=\"%s\" our opinion: master=%s witness=%s\n"),
 				  progname, nodes[i].node_id, nodes[i].conninfo_str,
-				  (nodes[i].is_witness) ? "true" : "false",
-				  (nodes[i].is_master) ? "true": "false");
+				  (nodes[i].is_master) ? "true" : "false",
+				  (nodes[i].is_witness) ? "true" : "false");
 
 			node_conn = establish_db_connection(nodes[i].conninfo_str, false);
 
@@ -616,6 +616,10 @@ do_recovery(void)
 				visible_nodes++;
 				nodes[i].is_visible = true;
 				nodes[i].is_ready = true;
+				log_debug(_("%s: optinion from remote node=%d about us: master=%s witness=%s\n"),
+					progname,nodes[i].node_id,
+					(strcmp(PQgetvalue(node_res, 0, 0), "t") == 0) ? "true" : "false",
+					(strcmp(PQgetvalue(node_res, 0, 1), "t") == 0) ? "true" : "false");
 			}
 
 		}
@@ -631,7 +635,7 @@ do_recovery(void)
 	PQfinish(node_conn);
 	PQfinish(recovery_conn);
 	/* terminate the recovery db we do not need it anymore */
-	log_notice(_("%s: stopping server using %s/pg_ctl\n"), progname,
+	log_notice(_("%s: stopping deconnected server using %s/pg_ctl\n"), progname,
 		   				local_options.pg_bindir);
 	maxlen_snprintf(script, "%s/pg_ctl %s -D %s -w  -o \"unix_socket_directory=''\" -o \"-k '' -h 127.10.54.32 -p2345\" stop",
 				local_options.pg_bindir, local_options.pgctl_options,local_options.recovery_dbdir);
