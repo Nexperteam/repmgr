@@ -626,7 +626,7 @@ do_recovery(void)
 		else
 		{
 			/* do not take in to account what we think all the rest has to agree on our role */
-			log_debug(_("%s: this is our information about us...just note it down"), progname);
+			log_debug(_("%s: this is our information about us...just note it down\n"), progname);
 			node_arrayid = i;
 			strncpy(nodes[i].conninfo_str, PQgetvalue(res, i, 1), MAXLEN);
 			nodes[i].is_witness = (strcmp(PQgetvalue(res, i, 2), "t") == 0) ? true : false;
@@ -646,7 +646,7 @@ do_recovery(void)
 		log_err(_("%s: Can't stop PostgreSQL server in deconnected mode\n"), progname);
 		exit(ERR_NO_RESTART);
 	}
-	
+	log_debug(_("%s: taking decision\n"), progname);	
 	if (visible_nodes < (total_nodes / 2.0))
 	{
 		log_err(_("%s: Can't reach most of the nodes. Bailing....\n"), progname);
