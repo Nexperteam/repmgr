@@ -646,7 +646,6 @@ do_recovery(void)
 		log_err(_("%s: Can't stop PostgreSQL server in deconnected mode\n"), progname);
 		exit(ERR_NO_RESTART);
 	}
-	log_debug(_("%s: taking decision\n"), progname);	
 	if (visible_nodes < (total_nodes / 2.0))
 	{
 		log_err(_("%s: Can't reach most of the nodes. Bailing....\n"), progname);
@@ -654,13 +653,11 @@ do_recovery(void)
 	}
 	
 	/* gather numbers and figure out what to do */
-	log_debug(_("%s: taking decision2\n"), progname);	
 	if(total_nodes <= 1)
 	{
 		log_err(_("%s: The population of this cluster is too small to take decisions...bailing...\n"), progname);
 		terminate(ERR_FAILOVER_FAIL);
 	}	
-	log_debug(_("%s: taking decision3\n"), progname);	
 	if(masterrole > (total_nodes / 2.0))
 	{
 		if(nodes[node_arrayid].is_master)
@@ -676,13 +673,12 @@ do_recovery(void)
 			terminate(ERR_FAILOVER_FAIL);
 		}
 	}
-	log_debug(_("%s: taking decision4\n"), progname);	
 	if(witnessrole > 0)
 	{
 		if(nodes[node_arrayid].is_witness)
 		{
-			log_info(_("%s: this is a witness which has died. All she needs is a jumpstart.\n"), progname);
-			do_jumpstart=true;
+			log_info(_("%s: this is a witness which has died. Just start this node.\n"), progname);
+			exit(ERR_NO_RESTART);
 		}
 		else
 		{
@@ -690,7 +686,6 @@ do_recovery(void)
 			terminate(ERR_FAILOVER_FAIL);
 		}
 	}
-	log_debug(_("%s: taking decision5\n"), progname);	
 	if(masterrole < ((total_nodes /2.0)*-1))
 	{
 		if(nodes[node_arrayid].is_master)
@@ -704,10 +699,8 @@ do_recovery(void)
 			do_jumpstart=true;
 		}
 	}
-	log_debug(_("%s: taking decision6\n"), progname);	
 	if(do_jumpstart)
 	{
-		log_debug(_("%s: taking decision7\n"), progname);	
 	
 		log_notice(_("%s: jumpstarting server using %s/pg_ctl\n"), progname,
 		   				local_options.pg_bindir);
@@ -725,6 +718,8 @@ do_recovery(void)
 		log_info(_("%s: Please reclone this postgres server into a slave.\n"), progname);
 		exit(ERR_NO_RESTART);
 	}
+	log_info(_("%s: no clear decision has come out of the recovery analysis (not enough nodes?)...\n"), progname);
+	exit(ERR_NO_RESTART);
 	
 }
 /*
