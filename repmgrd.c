@@ -702,6 +702,8 @@ do_recovery(void)
 	}
 	if(do_jumpstart)
 	{
+		log_debug(_("%s: taking decision2\n"), progname);	
+	
 		log_notice(_("%s: jumpstarting server using %s/pg_ctl\n"), progname,
 		   				local_options.pg_bindir);
 		maxlen_snprintf(script, "%s/pg_ctl %s start -D %s",
