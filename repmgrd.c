@@ -654,11 +654,13 @@ do_recovery(void)
 	}
 	
 	/* gather numbers and figure out what to do */
+	log_debug(_("%s: taking decision2\n"), progname);	
 	if(total_nodes <= 1)
 	{
 		log_err(_("%s: The population of this cluster is too small to take decisions...bailing...\n"), progname);
 		terminate(ERR_FAILOVER_FAIL);
 	}	
+	log_debug(_("%s: taking decision3\n"), progname);	
 	if(masterrole > (total_nodes / 2.0))
 	{
 		if(nodes[node_arrayid].is_master)
@@ -674,6 +676,7 @@ do_recovery(void)
 			terminate(ERR_FAILOVER_FAIL);
 		}
 	}
+	log_debug(_("%s: taking decision4\n"), progname);	
 	if(witnessrole > 0)
 	{
 		if(nodes[node_arrayid].is_witness)
@@ -687,6 +690,7 @@ do_recovery(void)
 			terminate(ERR_FAILOVER_FAIL);
 		}
 	}
+	log_debug(_("%s: taking decision5\n"), progname);	
 	if(masterrole < ((total_nodes /2.0)*-1))
 	{
 		if(nodes[node_arrayid].is_master)
@@ -700,9 +704,10 @@ do_recovery(void)
 			do_jumpstart=true;
 		}
 	}
+	log_debug(_("%s: taking decision6\n"), progname);	
 	if(do_jumpstart)
 	{
-		log_debug(_("%s: taking decision2\n"), progname);	
+		log_debug(_("%s: taking decision7\n"), progname);	
 	
 		log_notice(_("%s: jumpstarting server using %s/pg_ctl\n"), progname,
 		   				local_options.pg_bindir);
