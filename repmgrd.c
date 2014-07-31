@@ -565,7 +565,7 @@ do_recovery(void)
         res = PQexec(recovery_conn, sqlquery);
         if (PQresultStatus(res) != PGRES_TUPLES_OK)
         {
-                log_err(_("Can't get nodes' info is this node correctly initialized?: %s\n"), PQerrorMessage(recovery_conn));
+                log_err(_("%s: Can't get nodes' info is this node correctly initialized?: %s\n"), progname, PQerrorMessage(recovery_conn));
                 PQclear(res);
                 terminate(ERR_DB_QUERY);
         }
@@ -626,6 +626,7 @@ do_recovery(void)
 		else
 		{
 			/* do not take in to account what we think all the rest has to agree on our role */
+			log_debug(_("%s: this is our information about us...just note it down"), progname);
 			node_arrayid = i;
 			strncpy(nodes[i].conninfo_str, PQgetvalue(res, i, 1), MAXLEN);
 			nodes[i].is_witness = (strcmp(PQgetvalue(res, i, 2), "t") == 0) ? true : false;
@@ -642,23 +643,20 @@ do_recovery(void)
 	ret = system(script);
 	if (ret != 0)
 	{
-		log_err(_("Can't stop PostgreSQL server in deconnected mode\n"));
+		log_err(_("%s: Can't stop PostgreSQL server in deconnected mode\n"), progname);
 		exit(ERR_NO_RESTART);
 	}
 	
 	if (visible_nodes < (total_nodes / 2.0))
 	{
-		log_err(_("Can't reach most of the nodes.\n"
-				  "It is not safe to bring up this postgresql server.\n"
-		"Human intervention is needed to resolve this situation.\n"));
+		log_err(_("%s: Can't reach most of the nodes. Bailing....\n"), progname);
 		terminate(ERR_FAILOVER_FAIL);
 	}
 	
 	/* gather numbers and figure out what to do */
 	if(total_nodes <= 1)
 	{
-		log_err(_("The population of this cluster is too small to take decisions\n"
-		"Human intervention is needed to resolve this situation.\n"));
+		log_err(_("%s: The population of this cluster is too small to take decisions...bailing...\n"), progname);
 		terminate(ERR_FAILOVER_FAIL);
 	}	
 	if(masterrole > (total_nodes / 2.0))
@@ -666,13 +664,13 @@ do_recovery(void)
 		if(nodes[node_arrayid].is_master)
 		{
 			/* we have a died master, no action needed */
-			log_info(_("this is a master which has died.  All she needs is a jumpstart.\n"));
+			log_info(_("%s: this is a master which has died.  All she needs is a jumpstart.\n"), progname);
 			do_jumpstart=true;
 		}
 		else
 		{
 			/* this is awkward we do not think we're master but the others do */
-			log_info(_("we do not think that we are master but all the others do.\n"));
+			log_info(_("%s: we do not think that we are master but all the others do.\n"), progname);
 			terminate(ERR_FAILOVER_FAIL);
 		}
 	}
@@ -680,12 +678,12 @@ do_recovery(void)
 	{
 		if(nodes[node_arrayid].is_witness)
 		{
-			log_info(_("this is a witness which has died. All she needs is a jumpstart.\n"));
+			log_info(_("%s: this is a witness which has died. All she needs is a jumpstart.\n"), progname);
 			do_jumpstart=true;
 		}
 		else
 		{
-			log_info(_("someone thinks that we are a witness...bailing out.\n"));
+			log_info(_("%s: someone thinks that we are a witness...bailing out.\n"), progname);
 			terminate(ERR_FAILOVER_FAIL);
 		}
 	}
@@ -693,31 +691,31 @@ do_recovery(void)
 	{
 		if(nodes[node_arrayid].is_master)
 		{
-			log_info(_("this is a former master which lost it mastership.  Needs converting to slave\n"));
+			log_info(_("%s: this is a former master which lost it mastership.  Needs converting to slave\n"), progname);
 			do_slaveconvert=true;
 		}
 		else
 		{
-			log_info(_("this is an old slave.  All she needs is a jumpstart.\n"));
+			log_info(_("%s: this is an old slave.  All she needs is a jumpstart.\n"), progname);
 			do_jumpstart=true;
 		}
 	}
 	if(do_jumpstart)
 	{
-		log_notice(_("%s: starting server using %s/pg_ctl\n"), progname,
+		log_notice(_("%s: jumpstarting server using %s/pg_ctl\n"), progname,
 		   				local_options.pg_bindir);
 		maxlen_snprintf(script, "%s/pg_ctl %s start -D %s",
 				local_options.pg_bindir, local_options.pgctl_options,local_options.recovery_dbdir);
 		ret = system(script);
 		if (ret != 0)
 		{
-			log_err(_("Can't start PostgreSQL server in normal mode\n"));
+			log_err(_("%s: Can't start PostgreSQL server in normal mode\n"), progname);
 			exit(ERR_NO_RESTART);
 		}
 	}
 	if(do_slaveconvert)
 	{
-		log_info(_("Please reclone this postgres server into a slave.\n"));
+		log_info(_("%s: Please reclone this postgres server into a slave.\n"), progname);
 		exit(ERR_NO_RESTART);
 	}
 	
