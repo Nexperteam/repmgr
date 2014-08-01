@@ -713,8 +713,8 @@ do_master_register(void)
 
 	/* Now register the master */
 
-	sqlquery_snprintf(sqlquery, "INSERT INTO %s.repl_nodes (id, cluster, name, conninfo, priority, master) "
-					  "VALUES (%d, '%s', '%s', '%s', %d,'true')",
+	sqlquery_snprintf(sqlquery, "INSERT INTO %s.repl_nodes (id, cluster, name, conninfo, priority, master, witness) "
+					  "VALUES (%d, '%s', '%s', '%s', %d,'true','false')",
 		repmgr_schema, options.node, options.cluster_name, options.node_name,
 					  options.conninfo, options.priority);
 	log_debug(_("master register: %s\n"), sqlquery);
@@ -872,8 +872,8 @@ do_standby_register(void)
 		PQclear(res);
 	}
 
-	sqlquery_snprintf(sqlquery, "INSERT INTO %s.repl_nodes(id, cluster, name, conninfo, priority) "
-					  "VALUES (%d, '%s', '%s', '%s', %d)",
+	sqlquery_snprintf(sqlquery, "INSERT INTO %s.repl_nodes(id, cluster, name, conninfo, priority, master, witness) "
+					  "VALUES (%d, '%s', '%s', '%s', %d, 'false', 'false')",
 		repmgr_schema, options.node, options.cluster_name, options.node_name,
 					  options.conninfo, options.priority);
 	log_debug(_("standby register: %s\n"), sqlquery);
@@ -1944,8 +1944,8 @@ do_witness_create(void)
 	
 		
 	/* register ourselves in the master */
-	sqlquery_snprintf(sqlquery, "INSERT INTO %s.repl_nodes(id, cluster, name, conninfo, priority, witness) "
-					  "VALUES (%d, '%s', '%s', '%s', %d, true)",
+	sqlquery_snprintf(sqlquery, "INSERT INTO %s.repl_nodes(id, cluster, name, conninfo, priority, witness, master) "
+					  "VALUES (%d, '%s', '%s', '%s', %d, true, false)",
 					  repmgr_schema, options.node, options.cluster_name,
 					  options.node_name, options.conninfo, options.priority);
 
