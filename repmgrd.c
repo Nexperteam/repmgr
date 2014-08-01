@@ -727,7 +727,7 @@ do_recovery(void)
 		log_info(_("%s: Please reclone this postgres server into a slave.\n"), progname);
 		exit(ERR_NO_RESTART);
 	}
-	log_info(_("%s: no clear decision has come out of the recovery analysis (not enough nodes?)...\n"), progname);
+	log_info(_("%s: no clear decision has come out of the recovery phase analysis (not enough nodes?)...\n"), progname);
 	exit(ERR_NO_RESTART);
 	
 }
