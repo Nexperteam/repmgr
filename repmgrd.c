@@ -677,7 +677,8 @@ do_recovery(void)
 	{
 		if(nodes[node_arrayid].is_witness)
 		{
-			log_info(_("%s: this is a witness which has died. Just start this node.\n"), progname);
+			/* witnesses can be tricky to start with the other port.  Let a human do it. */
+			log_info(_("%s: this is a witness which has died. You can just start this node.\n"), progname);
 			exit(ERR_NO_RESTART);
 		}
 		else
@@ -699,6 +700,11 @@ do_recovery(void)
 			do_jumpstart=true;
 		}
 	}
+	else
+	{
+		log_info(_("%s: not enough nodes available to take a decision...bailing out\n"), progname);
+		exit(ERR_NO_RESTART);
+	}
 	if(do_jumpstart)
 	{
 	
@@ -712,9 +718,12 @@ do_recovery(void)
 			log_err(_("%s: Can't start PostgreSQL server in normal mode\n"), progname);
 			exit(ERR_NO_RESTART);
 		}
+		log_debug(_("%s: successfully started postgresql in normal mode\n"), progname);
+		return;
 	}
 	if(do_slaveconvert)
 	{
+		/* this could go a lot further but for now juist give the info */
 		log_info(_("%s: Please reclone this postgres server into a slave.\n"), progname);
 		exit(ERR_NO_RESTART);
 	}
